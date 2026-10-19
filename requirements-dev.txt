@@ -1,0 +1,2 @@
+# Optional browser validation only. Building/serving the site uses Python's standard library.
+playwright==1.62.0
