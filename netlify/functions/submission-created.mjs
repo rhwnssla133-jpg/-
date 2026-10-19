@@ -73,7 +73,8 @@ export function makeHandler({ env = process.env, fetchImpl = fetch, siteConfig =
     } catch { return response(400, 'INVALID_SUBMISSION'); }
     let url;
     try {
-      url = new URL(env.GOOGLE_APPS_SCRIPT_URL);
+      // Deployment URL is public configuration; the signing key is server-only.
+      url = new URL(env.GOOGLE_APPS_SCRIPT_URL || siteConfig.integrations?.googleSheets?.webAppUrl);
       if (url.protocol !== 'https:' || url.hostname !== 'script.google.com' || !/^\/macros\/s\/[A-Za-z0-9_-]+\/exec$/.test(url.pathname) || url.search || url.hash || url.username || url.password || url.port) throw new Error('Invalid URL');
       if (!/^[a-f0-9]{64}$/i.test(env.GOOGLE_WEBHOOK_SECRET || '')) throw new Error('Invalid secret');
     } catch { return response(503, 'GOOGLE_CONFIGURATION_REQUIRED'); }

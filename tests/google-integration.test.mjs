@@ -148,6 +148,16 @@ test('Network errors and unconfirmed Google acknowledgments return failure', asy
   }
 });
 
+test('Configured web app URL works without a duplicate Netlify URL variable', async () => {
+  const g = googleMock(), c = configured();
+  let target;
+  const handler = makeHandler({ env: { ...env, GOOGLE_APPS_SCRIPT_URL: undefined }, siteConfig: c,
+    fetchImpl: async (url, options) => { target = url; return g.fetchImpl(url, options); } });
+  assert.equal((await handler(event(fixture()))).statusCode, 200);
+  assert.equal(target, c.integrations.googleSheets.webAppUrl);
+  assert.equal(g.state.emails.length, 1);
+});
+
 test('Other forms, missing consent, invalid endpoint, and conflicting IDs rejected', async () => {
   const g = googleMock();
   const handler = makeHandler({ env, siteConfig: configured(), fetchImpl: g.fetchImpl });

@@ -14,6 +14,8 @@
 
 운영 주소는 사용자가 제공한 `https://helpful-granita-0cfa57.netlify.app`로 설정했습니다. 이 환경의 프록시가 해당 사이트 읽기를 403으로 차단하여 현재 배포 내용과 GitHub 자동 배포 연결 여부는 확인하지 못했습니다.
 
+사용자가 전달한 Apps Script `/exec` 주소도 `config.json`의 `integrations.googleSheets.webAppUrl`에 반영했습니다. 주소는 공개 연결 정보이며 비밀키가 아닙니다. Netlify에 `GOOGLE_APPS_SCRIPT_URL`을 따로 등록하지 않으면 이 주소를 사용합니다. 실제 Google 배포 상태 조회는 현재 프록시 403으로 확인하지 못했고, 주소를 반영한 것만으로 연결 완료라고 보고하지 않습니다.
+
 ## 준비할 것
 
 - 알림받을 **본인 Google 계정**으로 만든 새 Google 스프레드시트.
@@ -61,11 +63,11 @@
 
 Netlify 사이트의 Git 배포 저장소를 연결합니다. `main`, 빌드 명령 `python3 scripts/build.py`, 공개 폴더 `dist`입니다. `netlify.toml`에 함수 폴더와 Node 22 설정을 포함했습니다. Netlify 함수 목록에서 **`submission-created`**가 배포되었는지 확인하세요. 이 예약 이벤트 함수는 Netlify Forms 접수 이벤트를 처리하기 위한 함수입니다. 브라우저 폼이나 Apps Script URL로 직접 접수를 우회하지 않습니다.
 
-Netlify 사이트의 **환경 변수**에 다음 세 개를 등록합니다. `GOOGLE_WEBHOOK_SECRET`은 보안 값으로 처리하고 Functions 런타임에 제공되게 설정하세요. 코드·브라우저 스크립트·커밋·공개 로그에 넣지 않습니다.
+Netlify 사이트의 **환경 변수**에 아래 설정을 등록합니다. 배포 주소가 코드에 반영되어 있으므로 URL 변수는 선택입니다. `GOOGLE_WEBHOOK_SECRET`은 보안 값으로 처리하고 Functions 런타임에 제공되게 설정하세요. 코드·브라우저 스크립트·커밋·공개 로그에 넣지 않습니다.
 
 | 변수 | 값 |
 | --- | --- |
-| `GOOGLE_APPS_SCRIPT_URL` | 3단계의 실제 `/exec` 주소 |
+| `GOOGLE_APPS_SCRIPT_URL` (선택) | 다른 배포 주소로 바꿀 때 등록. 없으면 코드의 `webAppUrl` 사용 |
 | `GOOGLE_WEBHOOK_SECRET` | Apps Script 스크립트 속성의 `WEBHOOK_SECRET`과 **동일한 값** |
 | `GOOGLE_SHEETS_ENABLED` | 초기에는 `false`. 설정과 개인정보 안내 확인 후 `true` |
 

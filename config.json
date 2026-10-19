@@ -43,6 +43,7 @@
   },
   "integrations": {
     "googleSheets": {
+      "webAppUrl": "https://script.google.com/macros/s/AKfycbxnTt2a9XHONplzfDfP5y4_FHbjU8LWZ1ujTI8ZcA8xa5Gvc2Tizep72SaeXShJglsf/exec",
       "requested": false,
       "deliveryConfigured": false,
       "privacyReviewedOn": null,
