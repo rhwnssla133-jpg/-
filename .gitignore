@@ -3,3 +3,5 @@ artifacts/
 .venv/
 .netlify/
 test-results/
+.env
+.env.*

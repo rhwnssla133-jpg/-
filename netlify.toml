@@ -4,6 +4,11 @@
 
 [build.environment]
   PYTHON_VERSION = "3.12"
+  NODE_VERSION = "22"
+
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
 
 [[headers]]
   for = "/*"

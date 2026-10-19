@@ -84,6 +84,14 @@ class BuildTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 builder.build(ROOT / 'config.json', Path(d))
 
+    def test_google_integration_requires_separate_privacy_confirmation(self):
+        c = fixture_config()
+        c['integrations']['googleSheets']['requested'] = True
+        missing = builder.readiness(c)
+        self.assertIn('integrations.googleSheets.deliveryConfigured', missing)
+        self.assertIn('integrations.googleSheets.transfer.countries', missing)
+        self.assertNotIn('operation.emailNotificationConfigured', missing)
+
     def test_refuse_insecure_domain(self):
         for bad in ['http://example.com', 'https://user:password@example.com', 'https://example.com/path', 'https://example.com/?query=1']:
             self.config['site']['url'] = bad

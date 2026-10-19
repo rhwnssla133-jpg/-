@@ -33,9 +33,20 @@ def readiness(config):
         value = transfer.get(key)
         if not confirmed(value) or (isinstance(value, list) and not all(confirmed(x) for x in value)):
             missing.append("privacy.transfer." + key)
-    for key in ("onlineRequested", "netlifyFormsConfigured", "emailNotificationConfigured", "contractAndCompensationReviewedOn"):
+    google = config.get('integrations', {}).get('googleSheets', {})
+    notification_keys = () if google.get('requested') else ('emailNotificationConfigured',)
+    for key in ("onlineRequested", "netlifyFormsConfigured", "contractAndCompensationReviewedOn") + notification_keys:
         if not confirmed(config["operation"].get(key)):
             missing.append("operation." + key)
+    if google.get('requested'):
+        for key in ('deliveryConfigured', 'privacyReviewedOn'):
+            if not confirmed(google.get(key)):
+                missing.append('integrations.googleSheets.' + key)
+        gt = google.get('transfer', {})
+        for key in ('recipientLegalName', 'recipientContact', 'countries', 'subprocessors', 'items', 'time', 'method', 'purpose', 'retention', 'dpaUrl', 'verifiedOn'):
+            value = gt.get(key)
+            if not confirmed(value) or (isinstance(value, list) and not all(confirmed(x) for x in value)):
+                missing.append('integrations.googleSheets.transfer.' + key)
     for key in ("effectiveDate", "url"):
         if not confirmed(config["site"].get(key)):
             missing.append("site." + key)
@@ -160,6 +171,14 @@ def build(config_path, output):
     privacy_body += f'<p>{keep} 이 기간은 상담 운영을 위한 보유 기준이며 모든 문의의 법정 보유기간을 의미하지 않습니다.</p><p>계약으로 전환된 기록은 실제 적용되는 법적 근거·항목·기간을 확인해 필요한 범위만 별도로 보관합니다. 모든 문의를 일괄 5년 보관하지 않습니다.</p><h2>4. 파기 절차와 방법</h2><p>상담 종료 또는 보유기간 경과 시 담당자가 접수 원본과 이메일 사본·휴지통을 확인해 삭제합니다. 자동 삭제 기능은 구현되어 있지 않습니다. 전자 기록은 서비스가 제공하는 삭제 기능을 사용하고, 출력물은 분쇄 등 복구하기 어려운 방법으로 파기합니다. 서비스 제공자의 백업·최종 삭제 주기는 확인한 계약과 국외이전 보유기간에 따릅니다.</p><h2>5. 열람·정정·삭제·동의 철회</h2><p><a href="{values["phoneLink"]}">{values["phone"]}</a> 또는 <a href="mailto:{values["email"]}">{values["email"]}</a>로 요청해 주세요. 본인 확인 후 관계 법령에 따라 처리하고 결과를 안내합니다. 법령에 따른 보존 의무 등으로 제한되는 경우 그 근거와 사유를 안내합니다. 필요 이상의 신분증·주민등록번호를 요구하지 않습니다.</p><h2>6. 처리 위탁과 제3자 제공의 구분</h2><p>온라인 접수 시 Netlify는 문의 접수·보관 및 알림 전송을 위한 수탁자로 이용할 예정입니다. 독립적인 마케팅 등 제3자의 목적을 위한 제공과 구분합니다. 이메일은 네이버메일 계정으로 수신되며 운영자가 접근권한과 삭제를 관리합니다. 실제 계약 주체·처리 범위·재위탁 현황과 적용되는 위탁 사항을 접수 개시 전에 확정합니다. 고객 동의 또는 법령상 근거 없이 별도 목적의 제3자 제공을 하지 않습니다.</p><h2 id="overseas">7. 국외이전 상세 안내와 별도 동의</h2><p>개인정보 보호법 제28조의8에 따른 별도 국외이전 동의 방식을 채택하는 초안입니다. 실제 배포일의 법령과 계정의 DPA·재위탁 현황을 확인해 아래 항목을 확정하고 적용 근거를 검토한 후 접수를 시작합니다. 국내에서만 처리한다고 표시하지 않습니다.</p>'
     privacy_body += table([('이전받는 자', pending(t['recipientLegalName'])), ('수탁자 연락처', pending(t['recipientContact'])), ('이전 국가', pending(t['countries'])), ('재위탁 수탁자·국가·업무', pending(t['subprocessors'])), ('이전 항목', pending(t['items'])), ('이전 시기', pending(t['time'])), ('이전 방법', pending(t['method'])), ('이전 목적', pending(t['purpose'])), ('보유·이용기간 및 삭제', pending(t['retention'])), ('확인 자료', f'<a href="{esc(t["dpaUrl"])}" rel="noopener noreferrer" target="_blank">DPA 확인 자료</a> · <a href="{esc(t["subprocessorsUrl"])}" rel="noopener noreferrer" target="_blank">재위탁 확인 자료</a>'), ('최종 확인일', pending(t['verifiedOn']))])
     privacy_body += f'<p>국외이전에 동의하지 않을 권리가 있으며, 동의하지 않으면 온라인 문의가 제한됩니다. <a href="{values["phoneLink"]}">{values["phone"]} 전화 상담</a>을 이용할 수 있습니다. 동의는 수집·이용 동의와 분리된 미선택 체크박스로 받습니다. 선택정보를 입력하면 별도 동의한 항목에 한해 이전 대상에 포함됩니다.</p><h2>8. 안전조치</h2><p>배포 환경에서는 HTTPS 통신을 사용합니다. 문의 관리자와 메일 계정의 접근권한을 최소화하고, 강력한 비밀번호와 다중 인증을 설정하며, 접근자와 보유기간을 정기 점검하는 운영 절차를 적용해야 합니다. 사이트에는 외부 광고·분석 스크립트를 넣지 않았습니다. 계정 보안과 삭제 절차의 실제 적용 여부는 운영자가 확인합니다.</p><h2>9. 방침 변경과 시행일</h2><p>처리 내용이 바뀌면 방침과 동의문 버전을 함께 변경하고 시행일을 게시합니다. 별도 동의가 필요한 변경은 관계 법령에 따라 안내하고 동의받습니다.</p><p><a href="/collection/">수집·이용 요약 보기</a> · <a href="/#inquiry">견적 문의로 돌아가기</a></p>'
+    google = c.get('integrations', {}).get('googleSheets', {})
+    if google.get('requested'):
+        gt = google['transfer']
+        google_notice = '<h2 id="google-processing">Google 문의 사본·알림 처리와 국외이전</h2><p>문의 원본은 Netlify에 접수되고, 동의한 문의 항목과 동의 기록의 사본은 Google 스프레드시트에 저장되며 운영자에게 이메일로 통지됩니다. 수집 목적은 견적 상담과 연락으로 동일합니다. 아래 내용도 별도 국외이전 동의의 대상에 포함됩니다.</p>'
+        google_notice += table([('처리자 / 연락처', pending(gt['recipientLegalName']) + ' / ' + pending(gt['recipientContact'])), ('이전 국가', pending(gt['countries'])), ('재위탁 수탁자·국가·업무', pending(gt['subprocessors'])), ('이전 항목', pending(gt['items'])), ('이전 시기 / 방법', pending(gt['time']) + ' / ' + pending(gt['method'])), ('목적', pending(gt['purpose'])), ('보유·삭제·백업 조건', pending(gt['retention'])), ('적용 계약·확인 자료', pending(gt['dpaUrl'])), ('확인일', pending(gt['verifiedOn']))])
+        google_notice += '<p>동의하지 않을 수 있으며 온라인 접수 대신 전화 상담을 이용할 수 있습니다. 상담 종료·보유기간 경과 시 문의 원본과 시트 행·메일·휴지통·별도 사본을 함께 삭제합니다. 이 사이트에 자동 삭제 기능은 없습니다. 시트 공유 대상은 필요한 담당자로 한정합니다.</p>'
+        privacy_body = privacy_body.replace('<h2>8. 안전조치</h2>', google_notice + '<h2>8. 안전조치</h2>')
+        privacy_body = privacy_body.replace('이메일은 네이버메일 계정으로 수신되며 운영자가 접근권한과 삭제를 관리합니다.', '문의 사본은 Google 스프레드시트에 기록되고 운영자의 Google 이메일로 통지됩니다. 기존 이메일 알림을 함께 이용한다면 그 사본도 동일하게 관리합니다.')
     page('/privacy/', '개인정보처리방침 | ' + b['name'], legal('개인정보처리방침', 'PRIVACY & YOUR RIGHTS', '개인정보를 어떻게 처리하고, 어떤 권리를 행사할 수 있는지 안내합니다.', privacy_body))
 
     compensation_body = f'<p class="notice">이사 과정에서 물품의 파손이나 분실이 의심되면 <a href="{values["phoneLink"]}">{values["phone"]}</a>로 알려주세요.</p><h2>1. 사고 접수</h2><p>해당 물품과 현장 상태를 사진으로 남기고, 물품명·모델명·구입 시기·구입가격을 확인할 수 있는 자료를 준비해 주시면 확인에 도움이 됩니다. 영수증이 없는 경우에도 확인 가능한 대체 자료를 함께 검토합니다.</p><h2>2. 사실 확인</h2><p>사고 경위와 물품 상태를 확인한 뒤 적용 법령과 계약 내용에 따라 책임 범위와 처리 방법을 안내합니다. 자료 요청은 사실 확인을 돕기 위한 것이며 법정 입증책임을 고객에게 일방적으로 전가하지 않습니다.</p><h2>3. 처리 결과와 배상 방법 안내</h2><p>업체의 배상책임이 인정되는 경우 수리가 가능한 물품은 수선하고, 수리가 불가능하거나 분실된 물품은 관련 기준에 따른 물품 가액 등을 검토해 배상합니다. 사용기간과 기존 상태 등을 고려할 수 있으며, 산정 근거와 처리 방법을 안내합니다.</p><p>보험 가입·보장 범위는 확인되지 않았으며 특정 보험이나 보장금액을 약속하지 않습니다. 실제 보험이 적용되는 경우에도 보험 한도가 업체의 모든 법적 책임 한도와 같다는 의미는 아닙니다.</p><h2>4. 이사 전에 준비해 주세요</h2><p>현금·귀금속·중요서류 등 휴대 가능한 귀중품은 직접 보관해 주시고, 고가품·특수물품은 계약 전에 운송 조건을 협의해 주세요.</p><h2>5. 발견 시 연락과 고객의 권리</h2><p>빠른 현장 확인을 위해 발견 즉시 연락을 권장하며, 이 안내로 관계 법령과 적용 약관에 따른 고객의 권리를 제한하지 않습니다. 당일 미신고, 고객 포장, 잔금 지급, 영수증 부재만으로 청구를 일괄 배제하지 않습니다.</p><p>이사화물 표준약관은 실제 계약에 적법하게 채택·교부되었는지 확인해야 하며, 이 홈페이지가 자동 적용을 뜻하지 않습니다. 표준약관의 일부 분실·훼손 관련 30일 통지 기준은 모든 청구에 공통된 소멸시효와 구분해야 합니다. 은폐 등 예외와 별도 책임 소멸기간도 적용 법령·약관의 현행 내용과 실제 계약을 확인해 판단합니다. 이 안내는 별도의 신고기한이나 면책 조건을 정하지 않습니다.</p><h2>6. 계약 내용과 확인 자료</h2><p>최종 견적, 작업 범위, 물품 상태, 변경 합의, 사고 접수와 처리 내용을 서로 확인할 수 있도록 남겨 주세요. 홈페이지 안내와 계약 내용은 함께 확인하며, 관계 법령에 따른 고객의 권리가 우선합니다.</p><ul><li><a href="https://www.ftc.go.kr/www/selectBbsNttView.do?bordCd=201&amp;key=202&amp;nttSn=11148" target="_blank" rel="noopener noreferrer">공정거래위원회 이사화물 표준약관 확인</a></li><li><a href="https://www.easylaw.go.kr/CSP/CnpClsMain.laf?ccfNo=3&amp;cciNo=1&amp;cnpClsNo=1&amp;csmSeq=629&amp;popMenu=ov" target="_blank" rel="noopener noreferrer">찾기 쉬운 생활법령: 이사 분쟁 안내</a></li></ul><p>실제 계약에 적용되는 약관과 법령은 계약 시점에 확인합니다. 확인되지 않은 처리기한이나 전액 보상을 약속하지 않습니다.</p><p><a href="{values["phoneLink"]}">파손·분실 전화 접수 {values["phone"]}</a> · <a href="/#inquiry">이사 문의</a></p>'
