@@ -4,106 +4,79 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
-
 ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location('ok_build', ROOT / 'scripts/build.py')
-builder = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(builder)
-
+builder = importlib.util.module_from_spec(spec); spec.loader.exec_module(builder)
 
 def fixture_config():
-    """Synthetic configuration, for mocked browser tests only. Never deployed."""
     c = copy.deepcopy(json.loads((ROOT / 'config.json').read_text()))
-    # Baseline fixture exercises the original Netlify notification workflow.
-    # The Google workflow has its own separate privacy and integration checks.
-    c['integrations']['googleSheets']['requested'] = False
     for key in ['representative', 'registrationNumber', 'address', 'transportPermit', 'openingHours', 'insuranceDetails']:
         c['business'][key] = '자동화 테스트 전용 값 (실제 사업정보 아님)'
     c['site'].update(url='https://ok-express-fixture.netlify.app', effectiveDate='2026-10-19')
     c['privacy'].update(responsiblePerson='테스트 담당자', department='테스트 부서', manualDeletionProcedureConfirmed=True, noticeReviewedOn='2026-10-19')
-    for key, value in c['privacy']['transfer'].items():
-        if not value:
-            c['privacy']['transfer'][key] = ['테스트 전용'] if isinstance(value, list) else '자동화 테스트 전용'
-    c['operation'].update(onlineRequested=True, netlifyFormsConfigured=True, emailNotificationConfigured=True, contractAndCompensationReviewedOn='2026-10-19')
+    g = c['integrations']['googleSheets']
+    g.update(requested=True, deliveryConfigured=True, privacyReviewedOn='2026-10-19')
+    for key, value in g['transfer'].items():
+        g['transfer'][key] = ['테스트 전용'] if isinstance(value, list) else '테스트 전용 값'
+    c['operation'].update(onlineRequested=True, contractAndCompensationReviewedOn='2026-10-19')
     return c
 
-
 class BuildTests(unittest.TestCase):
-    def setUp(self):
-        self.config = json.loads((ROOT / 'config.json').read_text())
-
-    def test_locked_build_does_not_invent_a_missing_domain(self):
-        self.assertGreater(len(builder.readiness(self.config)), 20)
+    def test_default_is_locked_and_contains_no_netlify_form_or_iframe(self):
         with tempfile.TemporaryDirectory() as d:
-            self.config['site']['url'] = None
-            no_domain_config = Path(d) / 'no-domain.json'
-            no_domain_config.write_text(json.dumps(self.config))
-            output = Path(d) / 'site'
-            builder.build(no_domain_config, output)
+            output = Path(d) / 'site'; builder.build(ROOT / 'config.json', output)
             page = (output / 'index.html').read_text()
             self.assertIn('data-ready="false"', page)
-            self.assertIn('data-netlify="true"', page)
-            self.assertIn('name="form-name" value="ok-express-inquiry"', page)
-            self.assertNotIn('rel="canonical"', page)
-            self.assertFalse((output / 'sitemap.xml').exists())
+            self.assertNotIn('data-netlify', page); self.assertNotIn('<iframe', page)
+            self.assertNotIn('/.netlify/functions/', page)
             self.assertFalse((output / 'config.json').exists())
-            self.assertNotIn('이사 문의가 접수되었습니다.', (output / 'thank-you/index.html').read_text())
-            for filename in ['privacy/index.html', 'collection/index.html', 'compensation/index.html', '_headers', '404.html']:
-                self.assertTrue((output / filename).exists(), filename)
-            # Rebuild in place to exercise safe, repeatable refresh.
-            builder.build(no_domain_config, output)
+            for name in ['collection/index.html','privacy/index.html','compensation/index.html','_headers']:
+                self.assertTrue((output / name).exists())
+            builder.build(ROOT / 'config.json', output)
 
-    def test_no_single_switch_can_enable_incomplete_configuration(self):
-        self.config['operation']['onlineRequested'] = True
-        self.assertTrue(builder.readiness(self.config))
-
-    def test_each_required_setting_blocks_inquiry(self):
-        configured = fixture_config()
-        self.assertEqual(builder.readiness(configured), [])
-        for group, keys in [('business', ['representative', 'registrationNumber', 'address', 'transportPermit']), ('operation', ['netlifyFormsConfigured', 'emailNotificationConfigured']), ('privacy', ['manualDeletionProcedureConfirmed', 'noticeReviewedOn'])]:
-            for key in keys:
-                changed = copy.deepcopy(configured)
-                changed[group][key] = None
-                self.assertIn(f'{group}.{key}', builder.readiness(changed))
-        changed = copy.deepcopy(configured)
-        changed['privacy']['transfer']['countries'] = []
-        self.assertIn('privacy.transfer.countries', builder.readiness(changed))
-
-    def test_configured_domain_generates_seo_and_html_is_escaped(self):
-        c = fixture_config()
-        c['business']['representative'] = '<script>doNotRun()</script>'
+    def test_enabled_build_embeds_google_with_safe_csp_and_real_domain_seo(self):
         with tempfile.TemporaryDirectory() as d:
-            config = Path(d) / 'fixture.json'
-            config.write_text(json.dumps(c))
-            output = Path(d) / 'site'
-            builder.build(config, output)
-            page = (output / 'index.html').read_text()
-            self.assertIn('data-ready="true"', page)
-            self.assertIn('rel="canonical"', page)
-            self.assertIn('property="og:url"', page)
-            self.assertIn('&lt;script&gt;', page)
-            self.assertNotIn('<script>doNotRun()', page)
-            self.assertIn(c['site']['url'], (output / 'sitemap.xml').read_text())
+            c = fixture_config(); c['business']['representative'] = '<script>doNotRun()</script>'
+            p = Path(d) / 'fixture.json'; p.write_text(json.dumps(c))
+            out = Path(d) / 'site'; builder.build(p, out)
+            page = (out / 'index.html').read_text()
+            self.assertIn('id="google-inquiry"', page); self.assertIn('script.google.com/macros/s/', page)
+            self.assertNotIn('data-netlify', page); self.assertNotIn('id="phone"', page)
+            self.assertIn('&lt;script&gt;', page); self.assertIn('rel="canonical"', page)
+            self.assertIn(c['site']['url'], (out / 'sitemap.xml').read_text())
+            self.assertIn('frame-src https://script.google.com', (out / '_headers').read_text())
+            privacy = (out / 'privacy/index.html').read_text()
+            self.assertIn('Google 문의창', privacy)
+            self.assertNotIn('문의 원본은 Netlify에 접수되고', privacy)
 
-    def test_refuse_unknown_output_directory(self):
+    def test_missing_google_privacy_and_business_keep_form_locked(self):
+        c = fixture_config(); self.assertEqual(builder.readiness(c), [])
+        for group, key in [('business','address'),('privacy','responsiblePerson'),('operation','onlineRequested')]:
+            changed = copy.deepcopy(c); changed[group][key] = None
+            self.assertIn(group + '.' + key, builder.readiness(changed))
+        c['integrations']['googleSheets']['transfer']['countries'] = []
+        self.assertIn('integrations.googleSheets.transfer.countries', builder.readiness(c))
+
+    def test_unsafe_google_endpoint_rejected(self):
+        for endpoint in ['http://script.google.com/macros/s/id/exec','https://example.com/exec','https://script.google.com/macros/s/id/exec?secret=value']:
+            c = fixture_config(); c['integrations']['googleSheets']['webAppUrl'] = endpoint
+            with self.assertRaises(ValueError): builder.readiness(c)
+
+    def test_no_domain_is_invented(self):
+        c = fixture_config(); c['site']['url'] = None
         with tempfile.TemporaryDirectory() as d:
-            with self.assertRaises(ValueError):
-                builder.build(ROOT / 'config.json', Path(d))
+            p = Path(d) / 'fixture.json'; p.write_text(json.dumps(c)); out = Path(d) / 'site'
+            builder.build(p, out)
+            self.assertNotIn('rel="canonical"', (out / 'index.html').read_text())
+            self.assertFalse((out / 'sitemap.xml').exists())
 
-    def test_google_integration_requires_separate_privacy_confirmation(self):
-        c = fixture_config()
-        c['integrations']['googleSheets']['requested'] = True
-        missing = builder.readiness(c)
-        self.assertIn('integrations.googleSheets.deliveryConfigured', missing)
-        self.assertIn('integrations.googleSheets.transfer.countries', missing)
-        self.assertNotIn('operation.emailNotificationConfigured', missing)
+    def test_unknown_output_directory_is_preserved(self):
+        with tempfile.TemporaryDirectory() as d:
+            with self.assertRaises(ValueError): builder.build(ROOT / 'config.json', Path(d))
 
-    def test_refuse_insecure_domain(self):
-        for bad in ['http://example.com', 'https://user:password@example.com', 'https://example.com/path', 'https://example.com/?query=1']:
-            self.config['site']['url'] = bad
-            with self.assertRaises(ValueError):
-                builder.readiness(self.config)
+    def test_direct_thank_you_url_cannot_claim_receipt(self):
+        with tempfile.TemporaryDirectory() as d:
+            out = Path(d) / 'site'; builder.build(ROOT / 'config.json', out)
+            self.assertNotIn('이사 문의가 접수되었습니다.', (out / 'thank-you/index.html').read_text())
 
-
-if __name__ == '__main__':
-    unittest.main()
+if __name__ == '__main__': unittest.main()

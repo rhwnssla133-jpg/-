@@ -1,124 +1,107 @@
-# 새 Google 스프레드시트 + 내 이메일 알림 연결
+# ZIP 홈페이지 → Google 고객명단 + Gmail 알림
 
-구조: **홈페이지 → Netlify Forms 접수 원본 → Netlify `submission-created` 함수 → Google Apps Script → Google Sheets 기록 + 운영자 이메일 알림**.
+이 버전은 **Netlify에는 ZIP만 업로드**하고, Google이 문의 입력·시트 저장·메일 발송을 담당합니다. GitHub 연결이나 Netlify 함수 배포를 진행할 필요가 없습니다.
 
-코드는 작성되어 있지만 **아직 실제 Google 계정·시트·Netlify 사이트와 연결되지 않았습니다.** 실제 행 생성과 메일 수신은 계정 설정 후 검증해야 합니다. 현재 홈페이지의 온라인 접수 잠금도 유지되어 있습니다. 이 코드가 있는 것만으로 접수가 열리거나 메일이 발송되지는 않습니다.
+고객이 홈페이지 안의 Google 문의창에 입력 → Google 스프레드시트 `이사 문의`에 저장 → 운영자의 Google 이메일로 새 문의 알림을 보냅니다. 홈페이지는 Google의 **저장 완료 응답을 받은 뒤** 접수 성공을 표시합니다. 저장과 메일은 별개이므로 실제 수신함까지 확인해야 합니다.
 
-## 시트 생성과 테스트 메일을 한 번에 준비하기
+## 1. 기존 Google 코드 교체
 
-시트를 아직 만들지 않았다면 [Apps Script 새 프로젝트](https://script.google.com/home/start)에서 시작해도 됩니다. [Code.gs 전체](../google-apps-script/Code.gs)를 붙여넣어 저장하고 **`setupAndSendTest` → 실행**을 선택합니다. 본인 Google 계정으로 권한을 승인하면 고객명단 시트를 만들고, 본인 이메일로 테스트 알림과 시트 주소를 보냅니다. 기존 연결 시트가 있으면 재사용하며 반복 실행해도 새 시트를 계속 만들지 않습니다. 이미 구글 시트에서 연 Apps Script라면 그 시트를 사용합니다.
+이미 만든 Google 시트와 Apps Script 프로젝트를 사용하세요. 새 프로젝트를 만들 필요는 없습니다.
 
-수신 주소를 바꾸려면 **프로젝트 설정 → 스크립트 속성 → `ALERT_EMAIL`**에 직접 입력하세요. 비밀번호나 SMTP 설정은 필요하지 않습니다. 테스트 메일에는 비밀키와 고객 정보가 들어가지 않습니다. 이 단계는 시트 준비·메일 단독 테스트이며, 홈페이지 자동 연결에는 아래 웹 앱 배포·Netlify 설정이 필요합니다.
+1. Google 스프레드시트에서 **확장 프로그램 → Apps Script**를 엽니다. 독립형 프로젝트라면 기존 Apps Script 탭을 엽니다.
+2. [새 Code.gs 전체 보기](https://github.com/rhwnssla133-jpg/-/blob/main/google-apps-script/Code.gs)를 엽니다. GitHub의 복사 버튼 또는 Raw 화면에서 전체 코드를 복사합니다.
+3. Apps Script 왼쪽의 **Code.gs**를 누르고 기존 내용을 전부 선택해 새 코드로 교체한 뒤 저장합니다. HTML 파일은 별도로 만들지 않습니다.
+4. 톱니바퀴 **프로젝트 설정 → appsscript.json 매니페스트 파일 표시**를 켭니다. 편집기에서 [appsscript.json](../google-apps-script/appsscript.json)의 내용을 적용해 시간대·V8·필요 권한을 맞춥니다. 기존 프로젝트에 다른 기능이 있으면 별도 사본에서 검토 후 적용하세요.
+5. 편집기 상단 함수 목록에서 **setupAndSendTest**를 선택하고 **실행**합니다. 본인 Google 계정으로 요청된 시트·메일 권한을 확인하고 승인합니다.
+6. 본인 Google 메일함의 **[OK익스프레스] 연동 테스트** 메일을 엽니다. 본문에 고객명단 시트 주소가 들어 있습니다. 받은편지함·스팸함을 모두 확인하세요.
 
-독립형 프로젝트에서 만든 시트에는 관리 메뉴가 자동으로 생기지 않습니다. 이 경우 실패 메일 재전송은 Apps Script 편집기에서 `retryFailedNotifications`를 직접 실행합니다. 구글 시트의 확장 프로그램에서 연 바인딩 프로젝트는 시트의 연동 메뉴를 사용할 수 있습니다.
+`setupAndSendTest`는 기존 `SPREADSHEET_ID`를 우선 사용하고, 없으면 연결된 시트 또는 새 시트를 사용합니다. 기존 행을 지우지 않으며, 첫 행의 제목·순서가 다르면 오류로 중단합니다. 기존 시트 `이사 문의`의 A~R열을 임의로 바꾸지 마세요.
 
-운영 주소는 사용자가 제공한 `https://helpful-granita-0cfa57.netlify.app`로 설정했습니다. 이 환경의 프록시가 해당 사이트 읽기를 403으로 차단하여 현재 배포 내용과 GitHub 자동 배포 연결 여부는 확인하지 못했습니다.
+**초기 수신자는 실행한 Google 계정 이메일**입니다. 기존 `ALERT_EMAIL` 속성이 있으면 그 값을 유지합니다. 다른 본인 Google 주소로 받고 싶으면 **프로젝트 설정 → 스크립트 속성 → ALERT_EMAIL**을 수정하고 `sendTestNotification`을 실행하세요. 홈페이지 푸터의 네이버 문의 메일은 이 수신 설정과 별개입니다. Gmail 앱의 기기 푸시 알림은 휴대전화 Gmail 앱에서도 별도로 켜야 합니다.
 
-사용자가 전달한 Apps Script `/exec` 주소도 `config.json`의 `integrations.googleSheets.webAppUrl`에 반영했습니다. 주소는 공개 연결 정보이며 비밀키가 아닙니다. Netlify에 `GOOGLE_APPS_SCRIPT_URL`을 따로 등록하지 않으면 이 주소를 사용합니다. 실제 Google 배포 상태 조회는 현재 프록시 403으로 확인하지 못했고, 주소를 반영한 것만으로 연결 완료라고 보고하지 않습니다.
+빈 고객명단 파일을 먼저 사용하려면 [XLSX 템플릿 다운로드](https://github.com/rhwnssla133-jpg/-/raw/refs/heads/main/templates/ok-express-customer-list.xlsx) → Google 시트 **파일 → 가져오기 → 업로드**를 이용하세요. 자동 설정으로 만든 시트는 `이사 문의` 탭만 생성하며, XLSX의 `상담 관리`는 선택적인 수동 관리 탭입니다.
 
-알림 방식은 Google 시트·이메일로 선택되어 `requested`는 `true`입니다. 실제 Netlify 함수 배포, 전달 설정, 개인정보·국외이전 확인이 완료되지 않아 `deliveryConfigured`와 온라인 접수는 비활성 상태입니다. Google 웹 앱의 `enabled` 상태와 홈페이지 접수 활성화는 서로 다른 설정입니다.
+## 2. 스크립트 속성 확인
 
-## 준비할 것
+Apps Script의 **프로젝트 설정 → 스크립트 속성**에서 확인합니다. 값을 채팅이나 공개 파일에 올리지 마세요.
 
-- 알림받을 **본인 Google 계정**으로 만든 새 Google 스프레드시트.
-- GitHub 저장소 `rhwnssla133-jpg/-`를 연결한 Netlify 사이트.
-- 원래 홈페이지의 사업정보·개인정보·국외이전 미확정 항목 확인.
-
-**정적 ZIP만 끌어다 올린 사이트에는 Netlify Functions가 배포되지 않습니다.** 이번 연동은 Netlify에서 GitHub 저장소를 연결해 배포하세요. 같은 사이트를 Git 연동으로 전환할 수 있는지 현재 계정의 배포 설정을 확인합니다. Git 연결은 되어 있어도 실제 Functions 목록과 이벤트 실행을 확인해야 합니다.
-
-## 1. Google 스프레드시트 만들기
-
-빈 고객명단 템플릿을 사용하려면 먼저 [고객명단 XLSX](https://github.com/rhwnssla133-jpg/-/raw/refs/heads/main/templates/ok-express-customer-list.xlsx)를 내려받으세요. Google 스프레드시트에서 **파일 → 가져오기 → 업로드 → 새 스프레드시트 만들기**로 가져옵니다. `이사 문의`(연동 코드와 동일한 18개 열), `상담 관리`(수동 입력용), `사용 안내` 탭이 있습니다. 실제 고객이나 예시 고객은 없습니다. 가져온 뒤 `이사 문의` 탭 이름과 첫 행 열 이름·순서를 유지하세요. 템플릿만 가져오는 것으로 Apps Script가 설치되거나 메일이 연결되지는 않습니다. 아래 3단계부터 진행합니다.
-
-1. 알림받을 Google 계정으로 로그인해 [새 Google 스프레드시트](https://sheets.google.com)를 만듭니다.
-2. 제목은 `OK익스프레스 고객 문의`처럼 정합니다. **공유는 비공개**로 유지하고 필요한 담당자만 접근하게 합니다.
-3. 시트 상단 **확장 프로그램 → Apps Script**를 엽니다.
-4. 기본 `Code.gs` 내용을 지우고 저장소의 [Code.gs](../google-apps-script/Code.gs) 전체를 붙여넣습니다.
-5. Apps Script 프로젝트 설정에서 manifest 표시를 켜 `appsscript.json`이 보이면, 저장소의 [manifest](../google-apps-script/appsscript.json) 내용으로 설정합니다. 시간대는 `Asia/Seoul`, 실행 환경은 V8입니다. 필요한 권한은 스프레드시트, 이메일 전송, 본인 이메일 확인입니다.
-
-## 2. 초기 설정과 메일 단독 테스트
-
-1. 함수 선택 목록에서 **`setup` → 실행**을 선택합니다. 자신이 붙여넣은 코드와 요청 권한을 확인하고 Google 계정의 승인 절차를 진행합니다. 조직 정책으로 배포·권한이 차단되면 관리자에게 확인하며 우회하지 않습니다.
-2. 새 `이사 문의` 탭과 열 제목이 생성됩니다. 반복 실행해도 기존 고객 행을 지우거나 비밀키를 바꾸지 않습니다. 열 이름·순서를 임의로 변경하지 마세요.
-3. **프로젝트 설정 → 스크립트 속성**에서 아래 값이 생성되었는지 확인합니다. 값은 채팅이나 GitHub에 올리지 않습니다.
-
-| 속성 | 의미 |
+| 속성 | 용도 |
 | --- | --- |
-| `SPREADSHEET_ID` | 연결할 시트 ID. 초기 설정이 자동 저장하며 기존 값은 재사용 |
-| `ALERT_EMAIL` | `setup` 실행자의 Google 이메일. 자동 확인이 안 되면 여기에 실제 수신 주소 직접 입력 |
-| `WEBHOOK_SECRET` | 자동 생성된 64자리 키. 나중에 Netlify에 같은 값 입력 |
-| `INTEGRATION_ENABLED` | 초기값 `false`. 개인정보 안내 확정과 배포 설정 전에는 그대로 유지 |
+| `SPREADSHEET_ID` | 자동 설정한 실제 고객명단 시트 ID |
+| `ALERT_EMAIL` | 알림받을 본인 Google 이메일 |
+| `FORM_TOKEN_KEY` | 새 코드가 자동 생성하는 서버 내부 값. 수정하거나 홈페이지에 넣지 않음 |
+| `SITE_ORIGIN` | `https://helpful-granita-0cfa57.netlify.app` — 끝에 경로 없이 실제 홈페이지 주소 |
+| `INTEGRATION_ENABLED` | 접수 서버 사용 여부. 기존에 true로 설정했다면 유지될 수 있음 |
+| `PUBLIC_FORM_CONFIRMED` | **새로 추가됨. 기본 false.** 사업·개인정보 안내 확정 후 true로 변경 |
+| `MAX_DAILY_INQUIRIES` | 기본 40. 한국 시간 기준 하루 신규 접수 상한. 1~100 범위 |
 
-4. **`sendTestNotification` → 실행**을 선택합니다. 본인 메일로 `[OK익스프레스] 연동 테스트`가 도착하는지 수신함·스팸함에서 확인합니다. 이 테스트는 고객 행을 만들지 않습니다. Google이 요청을 받아도 실제 수신함 도착까지 보장하지 않으므로 직접 확인해야 합니다.
+초기 설정과 테스트 메일은 공개 접수를 켜지 않아도 가능합니다. 신규 접수는 두 스위치가 모두 `true`여야 합니다. 기존 방식의 `WEBHOOK_SECRET`과 Netlify의 `GOOGLE_WEBHOOK_SECRET`, `GOOGLE_SHEETS_ENABLED`는 **새 코드에서 사용하지 않습니다**. Google 내부 자동 생성 값은 Netlify로 복사하지 않습니다.
 
-이메일 주소를 채팅에 따로 보내지 않아도 이 방법으로 본인의 계정을 수신자로 설정할 수 있습니다. Apps Script 웹 앱은 다음 단계에서 반드시 **본인 권한으로 실행**해야 합니다.
+관리자 초기 설정·테스트 메일·실패 메일 재전송은 본인 Google 계정의 편집기 또는 시트 메뉴에서 실행합니다. 익명 방문자의 같은 함수 호출은 거부합니다.
 
-## 3. Apps Script 웹 앱 배포
+## 3. 기존 웹 앱을 새 버전으로 배포
 
-1. Apps Script의 **배포 → 새 배포 → 웹 앱**을 선택합니다.
-2. **실행 사용자: 나(소유자)**, **접근할 수 있는 사용자: 모든 사용자**로 설정합니다. 로그인하지 않은 Netlify 서버가 요청할 수 있어야 하며, 아래 코드가 별도로 HMAC 서명을 확인합니다. Google Workspace 정책에 따라 이 배포 옵션이 없으면 해당 계정에서 이 방식은 사용할 수 없습니다.
-3. 배포 후 **`https://script.google.com/macros/s/…/exec`** 주소를 복사합니다. `/dev` 테스트 주소를 사용하지 않습니다.
-4. 주소를 브라우저에서 열면 `sheetConfigured`, `emailConfigured`, `enabled` 상태만 나옵니다. 실제 이메일·시트 ID·비밀키는 표시하지 않습니다. **열기만으로 시트에 고객을 추가하거나 메일을 보내지 않습니다.** 상태 값이 참이어도 실제 고객 접수나 메일 도착을 검증했다는 의미는 아닙니다.
-5. 코드를 수정한 뒤에는 배포 관리에서 새 버전으로 업데이트해야 반영됩니다. 스크립트 속성은 코드에 넣지 않고 설정에서 관리합니다.
+코드 저장만으로 현재 공개된 웹 앱이 바뀌지 않습니다.
 
-## 4. Netlify 서버 설정
+1. Apps Script 오른쪽 위 **배포 → 배포 관리**를 누릅니다.
+2. 기존 웹 앱 배포를 선택하고 연필 모양 **수정**을 누릅니다.
+3. 버전을 **새 버전**으로 선택합니다.
+4. 실행 사용자는 **나**, 액세스 권한은 고객이 로그인 없이 사용할 수 있는 **모든 사용자**로 설정하고 **배포**합니다. 조직 계정에서 공개 사용이 제한되면 관리자 정책을 확인해야 합니다.
+5. 기존 배포를 수정하면 같은 `/exec` 주소를 유지합니다. 이미 제공한 주소를 홈페이지 설정에 넣어 두었습니다.
 
-Netlify 사이트의 Git 배포 저장소를 연결합니다. `main`, 빌드 명령 `python3 scripts/build.py`, 공개 폴더 `dist`입니다. `netlify.toml`에 함수 폴더와 Node 22 설정을 포함했습니다. Netlify 함수 목록에서 **`submission-created`**가 배포되었는지 확인하세요. 이 예약 이벤트 함수는 Netlify Forms 접수 이벤트를 처리하기 위한 함수입니다. 브라우저 폼이나 Apps Script URL로 직접 접수를 우회하지 않습니다.
+```text
+https://script.google.com/macros/s/AKfycbxnTt2a9XHONplzfDfP5y4_FHbjU8LWZ1ujTI8ZcA8xa5Gvc2Tizep72SaeXShJglsf/exec
+```
 
-Netlify 사이트의 **환경 변수**에 아래 설정을 등록합니다. 배포 주소가 코드에 반영되어 있으므로 URL 변수는 선택입니다. `GOOGLE_WEBHOOK_SECRET`은 보안 값으로 처리하고 Functions 런타임에 제공되게 설정하세요. 코드·브라우저 스크립트·커밋·공개 로그에 넣지 않습니다.
+새 코드의 기본 주소를 열면 **문의창**이 나옵니다. 설정 상태를 확인하려면 주소 끝에 **?status=1**을 붙입니다. 새 코드라면 `mode`는 `direct-google-form`입니다. 상태 화면에는 이메일·시트 ID·내부 키를 표시하지 않습니다. `enabled:false`면 두 스위치와 초기 설정을 확인하세요. 개인정보 준비 전의 false는 정상입니다.
 
-| 변수 | 값 |
-| --- | --- |
-| `GOOGLE_APPS_SCRIPT_URL` (선택) | 다른 배포 주소로 바꿀 때 등록. 없으면 코드의 `webAppUrl` 사용 |
-| `GOOGLE_WEBHOOK_SECRET` | Apps Script 스크립트 속성의 `WEBHOOK_SECRET`과 **동일한 값** |
-| `GOOGLE_SHEETS_ENABLED` | 초기에는 `false`. 설정과 개인정보 안내 확인 후 `true` |
+`service: OK Express 문의 수신자` 같은 예전 JSON만 나오면 아직 **이전 버전**입니다. 배포 관리에서 새 버전 선택을 다시 확인하세요. `/dev` 주소나 로그인 후 리디렉션된 `script.googleusercontent.com` 주소를 홈페이지에 넣지 않습니다.
 
-서버가 Google로 보내는 요청은 타임스탬프·임의값·내용에 대한 HMAC-SHA256 서명을 포함합니다. Apps Script는 서명이 다르거나 5분 이상 지난 요청을 거부합니다. 키 자체는 요청 본문이나 URL에 보내지 않습니다. 개인 데이터도 URL에 넣지 않습니다.
+다른 `/exec` 주소를 새로 만들었다면 `config.json`의 `integrations.googleSheets.webAppUrl`을 바꾸고 홈페이지를 다시 빌드해야 합니다.
 
-## 5. 개인정보 안내와 접수 개시
+## 4. 홈페이지 설정과 Netlify ZIP
 
-기존 `config.json`의 사업자·담당자·Netlify 국외이전 항목을 먼저 확정합니다. Google 사본 저장과 Gmail 알림으로 처리자가 추가되므로 **별도 Google 처리·국외이전 조건도 확인**해야 합니다.
+현재 ZIP은 사업자 상세정보·담당자·국외이전 조건이 미확정이라 전화 문의 상태입니다. 최초 제작 요청에 따라 사실을 만들거나 미확정 안내로 개인정보를 접수하지 않도록 잠갔습니다. 코드는 준비되었지만 ZIP 업로드만으로 Google 계정 설정까지 완료되지는 않습니다.
 
-`integrations.googleSheets`의 다음 값을 실제 확인 후 채웁니다.
+`config.json`에 다음 실제 정보를 반영합니다. 편집이 어렵다면 확인한 정보를 정리해 사이트 제작 담당자에게 전달해 ZIP 재생성을 요청하세요. 키·비밀번호는 전달하지 않습니다.
 
-- `transfer`: 실제 계약 주체·연락처·국가·관련 재위탁자·이전 항목·시기·방법·목적·보유/삭제/백업 조건·적용 계약 URL·확인일. 개인 Google 계정에 Google Workspace DPA가 당연히 적용된다고 가정하지 마세요. 확인되지 않은 국가·기간을 추정해서 넣지 않습니다.
-- `privacyReviewedOn`: 실제 검토일.
-- `deliveryConfigured`: 시트·스크립트·Netlify 함수 환경 변수 설정을 확인한 뒤 `true`.
-- `requested`: 이 알림 방식을 사용하려면 `true`.
+- `business`의 대표자·등록번호·주소·허가·운영시간·보험 현황.
+- `privacy`의 담당자·부서·삭제 절차 확인·검토일.
+- `integrations.googleSheets.transfer`의 실제 수탁 법인·연락처·처리 국가·재위탁·이전 항목·시기·방법·목적·보유/삭제/백업 조건·적용 문서 URL·확인일. 개인 계정에 Workspace 계약이 당연히 적용된다고 가정하거나 임의 국가를 넣지 않습니다.
+- `site.effectiveDate`, `site.policyVersion`, 실제 `site.url`.
+- `operation.contractAndCompensationReviewedOn`, Google의 `privacyReviewedOn`.
+- 계정 설정 확인 후 Google의 `deliveryConfigured:true`, 공개 개시 시 `operation.onlineRequested:true`.
 
-`requested: true`로 빌드하면 개인정보처리방침에 Google 처리 안내 표가 추가되고, 미확정 항목이 있으면 온라인 접수가 계속 잠깁니다. 필수 수집 동의·선택 동의·국외이전 동의와 새 동의문 버전을 함께 확인합니다. 선택 동의 없는 선택정보는 Google로도 보내지 않습니다.
+확정한 안내가 실제 홈페이지에 게시되는 시점에 Google의 `INTEGRATION_ENABLED`와 `PUBLIC_FORM_CONFIRMED`를 모두 `true`로 바꿉니다. 아래 명령은 홈페이지 ZIP과 같은 설정의 Google 코드를 함께 생성합니다. 동의문 버전 변경 시에도 **Google 새 버전 배포와 Netlify 재업로드를 함께** 해야 합니다.
 
-Google 방식을 선택하면 기존 `operation.emailNotificationConfigured` 확인 대신 Google 설정·고지 확인을 요구합니다. Netlify 공식 네이버메일 알림도 남겨 두면 두 경로로 알림이 올 수 있습니다. 불필요한 기존 알림은 Netlify 계정에서 직접 조정하고, 남기는 사본은 개인정보 안내·삭제 대상에 포함합니다.
+```sh
+python3 scripts/package.py
+```
 
-모든 확인 후 Apps Script의 `INTEGRATION_ENABLED`와 Netlify의 `GOOGLE_SHEETS_ENABLED`를 모두 `true`로 바꿉니다. GitHub의 설정 변경을 반영하고 Netlify를 재배포합니다. 기존 `operation.onlineRequested`와 Forms 감지 설정, 실제 도메인 등 접수 필수 조건도 충족해야 합니다. 화면 잠금은 계정 설정의 서버 접근 제어를 대신하지 않으므로 준비 전에는 Forms 감지를 켜지 않습니다.
+빌드 결과 `online inquiry: ENABLED`를 확인하고, 새로 생성된 **Code.gs를 Google에 적용해 새 버전 배포**한 다음 루트 `ok-express-netlify.zip`을 업로드합니다. `LOCKED`이면 출력된 누락 키를 확인하세요. 기본 제공 파일에는 테스트용 사업정보나 합성 고객 기록이 없습니다.
 
-## 6. 실제 연결 테스트
+Netlify에서 기존 사이트 → **Deploys** → 수동 업로드 영역을 이용합니다. ZIP을 직접 받지 않으면 압축을 풀어 `index.html`이 최상단인 폴더를 올립니다. **Link repository, Functions, Forms 메뉴는 새 방식의 필수 단계가 아닙니다.** 정적 ZIP에는 Google 서버 코드가 포함되지 않으며 Google 코드 배포는 3단계에서 따로 진행합니다.
 
-1. 실제 Netlify HTTPS 주소에서 비민감 테스트 내용으로 견적 문의를 접수합니다.
-2. **Netlify Forms에 원본 생성**, **Google 시트에 한 행 추가**, **본인 Google 메일에 알림 수신**을 각각 확인합니다. 프런트 성공창은 Netlify 원본 접수 응답을 뜻하며 Google 전달·메일 수신까지 뜻하지 않습니다.
-3. 선택정보 미동의 시 호칭·날짜·요청사항 칸이 비어 있는지 확인합니다. 전화번호의 앞자리 `0`이 유지되어야 합니다.
-4. 이메일 제목은 `[OK익스프레스] 새 이사 문의 · <Netlify 접수 ID>`이며 전화번호를 제목에 넣지 않습니다. 내용과 동의 기록은 본문·시트에서 확인합니다.
-5. 행의 **알림 상태가 `SENT`**인지 확인합니다. 이는 Google 메일 전송 호출이 성공했다는 뜻이며 수신함 도착까지 증명하지는 않습니다. `FAILED`이면 권한·수신 주소·현재 할당량을 확인하고, 시트를 새로고침해 메뉴 **OK익스프레스 연동 → 실패·미완료 메일 다시 보내기**를 실행합니다. 한 번에 최대 10건이며 자동 무한 재시도는 하지 않습니다.
-6. 테스트 기록을 Netlify, 시트, 메일, 휴지통과 별도 사본에서 삭제합니다.
+## 5. 실제 접수와 메일 확인
 
-같은 접수 ID를 다시 전달받으면 같은 행을 사용하고 `SENT` 상태면 중복 발송하지 않습니다. 다만 메일 발송 직후 실행이 끊겨 상태 저장이 되지 않는 경우에는 재발송될 수 있습니다. 완전한 1회 배달을 보장하지 않습니다. Google 장애로 행 자체를 저장하지 못하면 Netlify 원본을 확인해 미전달 문의를 복구해야 합니다. Netlify의 이벤트 자동 재시도·보존 조건은 현재 서비스에서 확인하고, 자동 재시도가 있다고 가정하지 않습니다.
+공개 개시 전 관리되는 시험 단계에서 다음을 확인합니다. 이 저장소의 자동 검사는 실제 Google 계정 수신을 대신하지 않습니다.
 
-## 보유기간·삭제·운영 제한
+1. 시크릿 창과 휴대전화에서 실제 Netlify 홈페이지를 엽니다. 로그인 없이 문의창이 나와야 합니다. 인앱 브라우저·타사 쿠키 제한도 확인합니다. 안 열리면 **별도 문의창 열기** 또는 전화 문의를 사용합니다.
+2. 본인 연락처와 비민감 시험 내용으로 접수합니다. 필수 동의·국외이전 동의를 확인하고, 선택 동의는 거부한 경우와 동의한 경우를 각각 시험합니다.
+3. 성공창의 문의 참조번호와 시트의 `접수 ID`가 같은지 확인합니다. 전화번호 앞자리 0, 지역·서비스·동의문 버전·동의 여부를 확인합니다. 선택 미동의 시 호칭·날짜·요청사항이 비어 있어야 합니다.
+4. Google 메일함에서 **[OK익스프레스] 새 이사 문의 · OK-…**를 확인합니다. 제목에는 전화번호가 없고 본문에 문의 내용과 비공개 시트 링크가 있습니다.
+5. 시트 `알림 상태`의 `SENT`는 MailApp 전송 호출 성공입니다. 받은편지함 도착을 보증하지 않으므로 실제 메일함·스팸함을 확인합니다.
+6. 메일 실패 시 행은 남고 `FAILED`로 표시됩니다. 권한·주소·할당량을 확인한 후 Apps Script에서 `retryFailedNotifications` 실행 또는 시트 새로고침 후 **OK익스프레스 연동 → 실패 메일 다시 보내기**를 사용합니다. 1회 최대 10건입니다.
+7. 테스트 문의를 시트·메일·휴지통·관리 기록·사본에서 삭제합니다.
 
-기존 운영안인 목적 달성 시 파기, 미계약 문의 최대 90일이 **Netlify 원본·Google 시트·이메일 사본**에 모두 적용되도록 운영합니다. 자동 삭제는 추가하지 않았습니다. 시트에서 해당 행을 삭제하고, 별도 복사본·다운로드·공유·버전 기록·제공자 백업의 보유/복구 가능성도 실제 계정 정책으로 검토하세요. 단순 셀 지우기를 모든 사본의 완전 삭제라고 단정하지 마세요. 메일은 휴지통·스팸함·전달된 사본까지 관리합니다.
+동일 참조번호 재시도는 같은 행을 확인하고 이미 발송했다면 다시 보내지 않습니다. 메일 발송 직후 실행이 중단돼 상태 저장이 안 된 예외에는 재발송될 수 있어 완전한 1회 배달을 보장하지 않습니다. 응답을 못 받으면 고객 화면은 입력을 유지하고 완료를 단정하지 않습니다. 수정한 내용으로 같은 참조번호를 재시도하면 충돌로 거부하므로 이미 저장되었을 가능성을 전화로 확인하세요.
 
-계약 전환 기록은 실제 법적 근거·항목·기간을 확인해 필요한 범위만 별도 보관합니다. 시트를 공개 공유하거나 고객 명단을 공개 로그에 출력하지 않습니다. 법적 검토·서비스의 국외이전 조건 확인이 끝났다고 인증하지 않습니다.
+## 운영·삭제와 제한
 
-Google Apps Script와 MailApp에는 계정별 일일 할당량과 실행 제한이 있고, Netlify Forms/Functions도 플랜·접수량 제한이 있습니다. 영구 무료·무제한·즉시 도착을 약속하지 않습니다. 별도 SMTP 비밀번호나 유료 자동화 도구는 필요하지 않습니다.
+새 버전은 Netlify Forms에 문의 원본을 저장하지 않습니다. 이전 버전의 접수·알림이 이미 있다면 자동 삭제되지 않으므로 별도로 관리하세요. Netlify 정적 호스팅 접속/보안 기록과 Google 처리 안내는 실제 계정 조건에 맞춰 확정해야 합니다.
 
-## 코드·검증·공식 참고자료
+목적 달성 시 파기, 미계약 문의 최대 90일은 운영안이며 자동 삭제나 법정기간을 의미하지 않습니다. Google 시트·상담 관리·Gmail·휴지통·다운로드/전달 사본과 실제 버전 기록·백업 정책을 함께 관리합니다. 고객명단은 비공개로 두고 관리자 권한과 다중 인증을 설정합니다.
 
-- 서버: [submission-created.mjs](../netlify/functions/submission-created.mjs)
-- Google 코드: [Code.gs](../google-apps-script/Code.gs), [appsscript.json](../google-apps-script/appsscript.json)
-- 모의 통합 검사: `node --test tests/google-integration.test.mjs` — 실제 시트·메일로 전송하지 않습니다.
-- [Netlify 이벤트 함수](https://docs.netlify.com/build/functions/trigger-on-events/)
-- [Apps Script 웹 앱 배포](https://developers.google.com/apps-script/guides/web)
-- [MailApp](https://developers.google.com/apps-script/reference/mail/mail-app)
-- [Apps Script 할당량](https://developers.google.com/apps-script/guides/services/quotas)
+Google 계정의 Apps Script·MailApp 실제 일일 할당량/실행 제한이 적용됩니다. 코드의 하루 40건 상한과 별개이며, 영구 무료·무제한·즉시 알림을 약속하지 않습니다. 공개 문의창에는 완전한 봇 차단 기능이 없으므로 남용과 일일 제한을 관리하고 장애 시 전화 상담을 유지하세요.
 
-기준일 2026-10-19. 이 환경에서는 위 공식 사이트 읽기 요청이 프록시 403으로 차단되어 현재 서비스 화면·원문을 확인하지 못했습니다. 실제 계정에서 배포일 문서와 동작을 확인해야 합니다. 사용자 계정의 실제 권한 승인·웹 앱 배포·환경 변수 등록·Forms 이벤트 실행·시트 행 생성·메일 수신은 아직 실행하지 않았습니다.
+기준일 2026-10-19. 실제 권한 승인·웹 앱 새 버전 배포·시트 기록·Gmail 수신은 이 환경에서 미실행입니다. [검증 보고서](VALIDATION.md)와 [공식 자료 확인 현황](SOURCES.md)을 참고하세요.

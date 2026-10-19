@@ -4,8 +4,10 @@ from pathlib import Path
 import shutil
 import zipfile
 from build import ROOT, build
+from google_bundle import generate
 
 build(ROOT / 'config.json', ROOT / 'dist')
+generate()
 artifacts = ROOT / 'artifacts'
 artifacts.mkdir(exist_ok=True)
 with zipfile.ZipFile(artifacts / 'ok-express-netlify.zip', 'w', zipfile.ZIP_DEFLATED) as archive:
@@ -14,7 +16,7 @@ with zipfile.ZipFile(artifacts / 'ok-express-netlify.zip', 'w', zipfile.ZIP_DEFL
             archive.write(path, path.relative_to(ROOT / 'dist'))
 shutil.copyfile(artifacts / 'ok-express-netlify.zip', ROOT / 'ok-express-netlify.zip')
 with zipfile.ZipFile(artifacts / 'ok-express-source.zip', 'w', zipfile.ZIP_DEFLATED) as archive:
-    roots = ['src', 'scripts', 'tests', 'docs', 'netlify', 'google-apps-script', 'templates', 'config.json', 'netlify.toml', 'README.md', 'requirements-dev.txt', '.gitignore']
+    roots = ['src', 'scripts', 'tests', 'docs', 'google-apps-script', 'templates', 'config.json', 'netlify.toml', 'README.md', 'requirements-dev.txt', '.gitignore']
     for name in roots:
         root = ROOT / name
         paths = sorted(root.rglob('*')) if root.is_dir() else [root]
