@@ -1,2 +1,3 @@
-# Optional browser validation only. Building/serving the site uses Python's standard library.
+# Optional browser checks and spreadsheet template generation. Site builds use the standard library.
 playwright==1.62.0
+openpyxl==3.1.5
