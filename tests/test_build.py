@@ -29,11 +29,14 @@ class BuildTests(unittest.TestCase):
     def setUp(self):
         self.config = json.loads((ROOT / 'config.json').read_text())
 
-    def test_default_is_locked_and_no_domain_is_invented(self):
+    def test_locked_build_does_not_invent_a_missing_domain(self):
         self.assertGreater(len(builder.readiness(self.config)), 20)
         with tempfile.TemporaryDirectory() as d:
+            self.config['site']['url'] = None
+            no_domain_config = Path(d) / 'no-domain.json'
+            no_domain_config.write_text(json.dumps(self.config))
             output = Path(d) / 'site'
-            builder.build(ROOT / 'config.json', output)
+            builder.build(no_domain_config, output)
             page = (output / 'index.html').read_text()
             self.assertIn('data-ready="false"', page)
             self.assertIn('data-netlify="true"', page)
@@ -45,7 +48,7 @@ class BuildTests(unittest.TestCase):
             for filename in ['privacy/index.html', 'collection/index.html', 'compensation/index.html', '_headers', '404.html']:
                 self.assertTrue((output / filename).exists(), filename)
             # Rebuild in place to exercise safe, repeatable refresh.
-            builder.build(ROOT / 'config.json', output)
+            builder.build(no_domain_config, output)
 
     def test_no_single_switch_can_enable_incomplete_configuration(self):
         self.config['operation']['onlineRequested'] = True

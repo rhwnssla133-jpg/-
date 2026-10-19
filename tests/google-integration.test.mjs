@@ -24,7 +24,7 @@ function fixture(overrides = {}) {
 const event = payload => ({ body: JSON.stringify({ payload }) });
 
 function googleMock() {
-  const state = { rows: [], props: { SPREADSHEET_ID: 'synthetic-sheet-id', ALERT_EMAIL: 'owner@example.test', WEBHOOK_SECRET: SECRET, INTEGRATION_ENABLED: 'true' }, emails: [], failMail: false, quota: 20, locked: false };
+  const state = { rows: [], props: { SPREADSHEET_ID: 'synthetic-sheet-id', ALERT_EMAIL: 'owner@example.test', WEBHOOK_SECRET: SECRET, INTEGRATION_ENABLED: 'true' }, emails: [], failMail: false, quota: 20, locked: false, standalone: false, createdSheets: 0 };
   const display = value => String(value ?? '').replace(/^'/, '');
   const sheet = {
     getLastRow: () => state.rows.length,
@@ -46,7 +46,7 @@ function googleMock() {
   const context = vm.createContext({
     PropertiesService: { getScriptProperties: () => properties },
     Session: { getEffectiveUser: () => ({ getEmail: () => 'owner@example.test' }) },
-    SpreadsheetApp: { getActiveSpreadsheet: () => book, openById: () => book, flush() {} },
+    SpreadsheetApp: { getActiveSpreadsheet: () => state.standalone ? null : book, openById: () => book, create: () => { state.createdSheets++; return book; }, flush() {} },
     Utilities: { Charset: { UTF_8: 'utf8' }, DigestAlgorithm: { SHA_256: 'sha256' }, getUuid: randomUUID,
       computeDigest: (_, value) => signedBytes(createHash('sha256').update(value).digest()),
       computeHmacSha256Signature: (value, key) => signedBytes(createHmac('sha256', key).update(value).digest()),
@@ -98,6 +98,23 @@ test('Tampered signatures and expired envelopes cannot write rows or send mail',
   assert.equal(g.post(envelope(item, SECRET, Date.now() - 360000)).ok, false);
   assert.equal(g.state.rows.length, 1);
   assert.equal(g.state.emails.length, 0);
+});
+
+test('Owner can create a sheet and receive its link with one explicit setup function', () => {
+  const g = googleMock(); g.state.props = {}; g.state.standalone = true;
+  g.context.setupAndSendTest();
+  assert.equal(g.state.createdSheets, 1);
+  assert.equal(g.state.props.SPREADSHEET_ID, 'synthetic-sheet-id');
+  assert.equal(g.state.emails.length, 1);
+  assert.equal(g.state.emails[0].to, 'owner@example.test');
+  assert.ok(g.state.emails[0].body.includes('https://docs.google.com/spreadsheets/d/synthetic-sheet-id/edit'));
+  assert.ok(!g.state.emails[0].body.includes(g.state.props.WEBHOOK_SECRET));
+  assert.equal(g.state.props.INTEGRATION_ENABLED, 'false');
+  g.context.setupAndSendTest();
+  assert.equal(g.state.createdSheets, 1);
+  const status = JSON.parse(g.context.doGet().content);
+  assert.deepEqual(status, { ok: true, service: 'OK Express inquiry receiver', sheetConfigured: true, emailConfigured: true, enabled: false });
+  assert.equal(g.state.rows.length, 1);
 });
 
 test('Sheet formulas escaped and optional fields carried only with consent', async () => {

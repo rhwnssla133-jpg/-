@@ -1,3 +1,4 @@
 User-agent: *
 Allow: /
 Disallow: /thank-you/
+Sitemap: https://helpful-granita-0cfa57.netlify.app/sitemap.xml

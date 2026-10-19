@@ -1,10 +1,12 @@
-// Paste into the Apps Script project bound to YOUR new Google spreadsheet.
+// Use in a bound spreadsheet project or a standalone Apps Script project.
+// Run setupAndSendTest once to prepare the sheet and email its link to yourself.
 // All credentials stay in Script Properties, never in the website or this file.
 var HEADERS = ['접수 ID', '접수 시각(서울)', '전화번호', '이사 종류', '출발 지역', '도착 지역', '성함 또는 호칭', '희망일', '날짜 미정', '추가 요청사항', '필수 동의', '선택 동의', '국외이전 동의', '동의문 버전', '문의 참조번호', '알림 상태', '알림 시각', '내용 해시'];
 var TAB_NAME = '이사 문의';
 
 function onOpen() {
   SpreadsheetApp.getUi().createMenu('OK익스프레스 연동')
+    .addItem('처음 설정 + 내 이메일로 시트 주소 받기', 'setupAndSendTest')
     .addItem('1. 초기 설정', 'setup')
     .addItem('2. 내 이메일로 테스트 알림', 'sendTestNotification')
     .addItem('실패·미완료 메일 다시 보내기 (최대 10건)', 'retryFailedNotifications')
@@ -12,11 +14,12 @@ function onOpen() {
 }
 
 function setup() {
-  var active = SpreadsheetApp.getActiveSpreadsheet();
-  if (!active) throw new Error('새 Google 스프레드시트의 확장 프로그램 > Apps Script에서 실행하세요.');
   var props = PropertiesService.getScriptProperties();
   var email = props.getProperty('ALERT_EMAIL') || Session.getEffectiveUser().getEmail();
   if (!validEmail_(email)) throw new Error('스크립트 속성 ALERT_EMAIL에 수신 이메일 주소를 입력하세요.');
+  var savedId = props.getProperty('SPREADSHEET_ID');
+  var active = savedId ? SpreadsheetApp.openById(savedId) : SpreadsheetApp.getActiveSpreadsheet();
+  if (!active) active = SpreadsheetApp.create('OK익스프레스 고객 문의');
   props.setProperty('SPREADSHEET_ID', active.getId());
   props.setProperty('ALERT_EMAIL', email);
   if (!props.getProperty('WEBHOOK_SECRET')) props.setProperty('WEBHOOK_SECRET', (Utilities.getUuid() + Utilities.getUuid()).replace(/-/g, ''));
@@ -30,9 +33,19 @@ function setup() {
   // No customer data, secret, or recipient address in execution logs.
 }
 
+function setupAndSendTest() {
+  // Explicit owner action. Does not activate online customer reception.
+  setup();
+  sendTestNotification();
+}
+
 function doGet() {
   // Opening the deployment URL never creates a row or sends an email.
-  return json_({ ok: true, service: 'OK Express inquiry receiver' });
+  var props = PropertiesService.getScriptProperties();
+  return json_({ ok: true, service: 'OK Express inquiry receiver',
+    sheetConfigured: !!props.getProperty('SPREADSHEET_ID'),
+    emailConfigured: validEmail_(props.getProperty('ALERT_EMAIL')),
+    enabled: props.getProperty('INTEGRATION_ENABLED') === 'true' });
 }
 
 function doPost(e) {
@@ -132,9 +145,12 @@ function notifyRow_(sheet, row, email) {
 }
 
 function sendTestNotification() {
-  var email = PropertiesService.getScriptProperties().getProperty('ALERT_EMAIL');
+  var props = PropertiesService.getScriptProperties();
+  var email = props.getProperty('ALERT_EMAIL');
+  var id = props.getProperty('SPREADSHEET_ID');
+  if (!id) throw new Error('setupAndSendTest를 먼저 실행하세요.');
   if (!validEmail_(email) || MailApp.getRemainingDailyQuota() < 1) throw new Error('수신 주소·메일 할당량을 확인하세요.');
-  MailApp.sendEmail({ to: email, subject: '[OK익스프레스] 연동 테스트', body: 'Google Apps Script의 이메일 전송 테스트입니다. 실제 고객 문의가 아닙니다.\n이 메일 수신만으로 홈페이지 접수부터의 전체 연동이 검증되지는 않습니다.' });
+  MailApp.sendEmail({ to: email, subject: '[OK익스프레스] 연동 테스트', body: '고객 문의 시트가 준비되었습니다.\n\n문의 시트: https://docs.google.com/spreadsheets/d/' + id + '/edit\n\nGoogle Apps Script의 이메일 전송 테스트입니다. 실제 고객 문의가 아닙니다.\n이 메일 수신만으로 홈페이지 접수부터의 전체 연동이 검증되지는 않습니다. Netlify 연결과 접수 설정을 완료해야 실제 문의가 전달됩니다.' });
 }
 
 function retryFailedNotifications() {
