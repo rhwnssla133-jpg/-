@@ -16,6 +16,8 @@
 
 사용자가 전달한 Apps Script `/exec` 주소도 `config.json`의 `integrations.googleSheets.webAppUrl`에 반영했습니다. 주소는 공개 연결 정보이며 비밀키가 아닙니다. Netlify에 `GOOGLE_APPS_SCRIPT_URL`을 따로 등록하지 않으면 이 주소를 사용합니다. 실제 Google 배포 상태 조회는 현재 프록시 403으로 확인하지 못했고, 주소를 반영한 것만으로 연결 완료라고 보고하지 않습니다.
 
+알림 방식은 Google 시트·이메일로 선택되어 `requested`는 `true`입니다. 실제 Netlify 함수 배포, 전달 설정, 개인정보·국외이전 확인이 완료되지 않아 `deliveryConfigured`와 온라인 접수는 비활성 상태입니다. Google 웹 앱의 `enabled` 상태와 홈페이지 접수 활성화는 서로 다른 설정입니다.
+
 ## 준비할 것
 
 - 알림받을 **본인 Google 계정**으로 만든 새 Google 스프레드시트.

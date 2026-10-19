@@ -14,6 +14,9 @@ spec.loader.exec_module(builder)
 def fixture_config():
     """Synthetic configuration, for mocked browser tests only. Never deployed."""
     c = copy.deepcopy(json.loads((ROOT / 'config.json').read_text()))
+    # Baseline fixture exercises the original Netlify notification workflow.
+    # The Google workflow has its own separate privacy and integration checks.
+    c['integrations']['googleSheets']['requested'] = False
     for key in ['representative', 'registrationNumber', 'address', 'transportPermit', 'openingHours', 'insuranceDetails']:
         c['business'][key] = '자동화 테스트 전용 값 (실제 사업정보 아님)'
     c['site'].update(url='https://ok-express-fixture.netlify.app', effectiveDate='2026-10-19')

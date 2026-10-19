@@ -16,7 +16,7 @@
   "site": {
     "url": "https://helpful-granita-0cfa57.netlify.app",
     "description": "광주 포장이사 OK익스프레스. 30년 노하우로 포장이사, 일반이사, 사무실이사의 작업 범위를 확인하고 안내합니다.",
-    "policyVersion": "2026-10-19-draft-2",
+    "policyVersion": "2026-10-19-draft-3",
     "effectiveDate": null
   },
   "privacy": {
@@ -44,7 +44,7 @@
   "integrations": {
     "googleSheets": {
       "webAppUrl": "https://script.google.com/macros/s/AKfycbxnTt2a9XHONplzfDfP5y4_FHbjU8LWZ1ujTI8ZcA8xa5Gvc2Tizep72SaeXShJglsf/exec",
-      "requested": false,
+      "requested": true,
       "deliveryConfigured": false,
       "privacyReviewedOn": null,
       "transfer": {
